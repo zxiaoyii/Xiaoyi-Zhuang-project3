@@ -3,23 +3,23 @@ import { useNavigate, useParams } from "react-router-dom";
 import client from "../api/client.js";
 import { useAuth } from "../context/AuthContext.jsx";
 
-// Check if cell i has a value that conflicts with another cell in the same row / col / box.
-function isCellInvalid(state, i) {
+// Check if cell i conflicts with another cell in the same row / col / box.
+function isCellInvalid(state, i, size, boxRows, boxCols) {
   const n = state[i];
   if (!n) return false;
-  const r = (i / 9) | 0;
-  const c = i % 9;
-  for (let j = 0; j < 9; j++) {
-    if (j !== c && state[r * 9 + j] === n) return true;
+  const r = (i / size) | 0;
+  const c = i % size;
+  for (let j = 0; j < size; j++) {
+    if (j !== c && state[r * size + j] === n) return true;
   }
-  for (let k = 0; k < 9; k++) {
-    if (k !== r && state[k * 9 + c] === n) return true;
+  for (let k = 0; k < size; k++) {
+    if (k !== r && state[k * size + c] === n) return true;
   }
-  const br = r - (r % 3);
-  const bc = c - (c % 3);
-  for (let di = 0; di < 3; di++) {
-    for (let dj = 0; dj < 3; dj++) {
-      const p = (br + di) * 9 + (bc + dj);
+  const br = Math.floor(r / boxRows) * boxRows;
+  const bc = Math.floor(c / boxCols) * boxCols;
+  for (let di = 0; di < boxRows; di++) {
+    for (let dj = 0; dj < boxCols; dj++) {
+      const p = (br + di) * size + (bc + dj);
       if (p !== i && state[p] === n) return true;
     }
   }
@@ -59,6 +59,9 @@ export default function GamePage() {
   const canEdit = !!username;
   const completedForViewer = game?.viewerCompleted;
   const interactive = canEdit && !completedForViewer;
+  const size    = game?.size    ?? 9;
+  const boxRows = game?.boxRows ?? 3;
+  const boxCols = game?.boxCols ?? 3;
 
   function displayAt(i) {
     if (completedForViewer && game.solution) return game.solution[i];
@@ -153,12 +156,13 @@ export default function GamePage() {
         setDigit(selected, 0);
         return;
       }
-      if (e.key >= "1" && e.key <= "9") {
+      const d = parseInt(e.key, 10);
+      if (!isNaN(d) && d >= 1 && d <= size) {
         e.preventDefault();
-        setDigit(selected, parseInt(e.key, 10));
+        setDigit(selected, d);
       }
     },
-    [interactive, selected, game, setDigit],
+    [interactive, selected, game, size, setDigit],
   );
 
   useEffect(() => {
@@ -193,7 +197,9 @@ export default function GamePage() {
         <h1>{game.name}</h1>
         <p className="sub">
           <span className={`diff-badge${game.difficulty === "EASY" ? " easy" : ""}`}>
-            {game.difficulty}
+            {game.difficulty
+              ? game.difficulty.charAt(0) + game.difficulty.slice(1).toLowerCase()
+              : ""}
           </span>
           {" "}by {game.createdBy}
         </p>
@@ -209,16 +215,17 @@ export default function GamePage() {
 
       <div
         className={`board${!interactive ? " board-readonly" : ""}`}
+        style={{ "--board-size": size }}
         aria-label="Sudoku board"
       >
-        {Array.from({ length: 9 }).map((_, r) => (
+        {Array.from({ length: size }).map((_, r) => (
           <div className="row" key={r}>
-            {Array.from({ length: 9 }).map((__, c) => {
-              const i = r * 9 + c;
+            {Array.from({ length: size }).map((__, c) => {
+              const i = r * size + c;
               const fixed = game.given[i];
               const v = displayAt(i);
               const active = selected === i;
-              const invalid = !completedForViewer && !fixed && isCellInvalid(game.state, i);
+              const invalid = !completedForViewer && !fixed && isCellInvalid(game.state, i, size, boxRows, boxCols);
               return (
                 <button
                   type="button"
@@ -228,8 +235,8 @@ export default function GamePage() {
                     (fixed ? " fixed" : "") +
                     (active && interactive ? " selected" : "") +
                     (invalid ? " invalid" : "") +
-                    (r % 3 === 2 && r < 8 ? " thick-b" : "") +
-                    (c % 3 === 2 && c < 8 ? " thick-r" : "")
+                    (r % boxRows === boxRows - 1 && r < size - 1 ? " thick-b" : "") +
+                    (c % boxCols === boxCols - 1 && c < size - 1 ? " thick-r" : "")
                   }
                   disabled={!interactive}
                   onClick={() => onCellClick(i)}
@@ -245,7 +252,7 @@ export default function GamePage() {
       {interactive && (
         <div className="pad-block">
           <div className="num-pad" aria-label="Number pad">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
+            {Array.from({ length: size }, (_, i) => i + 1).map((d) => (
               <button
                 key={d}
                 type="button"

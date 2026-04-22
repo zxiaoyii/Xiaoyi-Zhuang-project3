@@ -8,7 +8,8 @@ import { buildRandomGame, validateCustomClues } from "../lib/sudoku.js";
 const router = express.Router();
 
 function isSolved(state, solution) {
-  for (let i = 0; i < 81; i++) {
+  if (state.length !== solution.length) return false;
+  for (let i = 0; i < solution.length; i++) {
     if (state[i] !== solution[i] || state[i] === 0) return false;
   }
   return true;
@@ -33,6 +34,9 @@ function jsonGame(g, username) {
     id: g._id.toString(),
     name: g.name,
     difficulty: g.difficulty,
+    size:    g.size    ?? 9,
+    boxRows: g.boxRows ?? 3,
+    boxCols: g.boxCols ?? 3,
     createdBy: g.createdBy,
     createdAt: g.createdAt,
     given: g.given,
@@ -82,11 +86,14 @@ router.post("/", requireAuth, async function (req, res) {
     res.status(500).json({ error: "Could not generate a unique name." });
     return;
   }
-  const { puzzle, given, solution } = buildRandomGame(diff);
+  const { puzzle, given, solution, config } = buildRandomGame(diff);
   const state = puzzle.slice();
   const doc = await SudokuGame.create({
     name,
     difficulty: diff,
+    size:    config.size,
+    boxRows: config.boxRows,
+    boxCols: config.boxCols,
     createdBy,
     puzzle,
     solution,
@@ -151,8 +158,9 @@ router.put("/:id", requireAuth, async function (req, res) {
   }
   const username = getUsername(req);
   const next = req.body?.state;
-  if (!Array.isArray(next) || next.length !== 81) {
-    res.status(400).json({ error: "state must be an array of 81 numbers." });
+  const totalCells = (g.size ?? 9) * (g.size ?? 9);
+  if (!Array.isArray(next) || next.length !== totalCells) {
+    res.status(400).json({ error: `state must be an array of ${totalCells} numbers.` });
     return;
   }
   for (let i = 0; i < 81; i++) {
